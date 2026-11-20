@@ -12,7 +12,8 @@ dist/
 # Rust & WASM build artifacts
 target/
 **/*.rs.bk
-packages/wasm-bridge/pkg/
+packages/wasm-bridge/pkg/*
+!packages/wasm-bridge/pkg/rbx_dom_wasm.d.ts
 
 # Environment & local secrets
 .env
