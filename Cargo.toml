@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/rbx_dom_wasm"]
+resolver = "2"

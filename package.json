@@ -1,0 +1,16 @@
+{
+	"name": "towerlab",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Local-first Roblox tower kit converter and DOM inspector",
+	"license": "MIT",
+	"scripts": {
+		"dev": "pnpm --filter @towerlab/web dev",
+		"build": "pnpm run build:wasm && pnpm --filter @towerlab/web build",
+		"build:wasm": "wasm-pack build crates/rbx_dom_wasm --target web --out-dir ../../packages/wasm-bridge/pkg",
+		"typecheck": "pnpm -r --if-present typecheck"
+	},
+	"devDependencies": {
+		"typescript": "^5.7.0"
+	}
+}
