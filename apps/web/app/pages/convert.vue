@@ -1,46 +1,92 @@
 <script setup lang="ts">
 import {
 	convertDocument,
-	type ConvertTarget,
-	type ConversionWarning,
+	detectSource,
+	documentStats,
+	pipelineLabel,
+	type OutputShape,
+	type TargetKit,
 } from '../../../../packages/kit-engine/src'
 import { serializeRbxm } from '@towerlab/wasm-bridge'
-import { downloadBytes, rbxmName } from '../utils/format'
+import { downloadBytes, formatBytes, rbxlName, rbxmName } from '../utils/format'
 
 useHead({ title: 'Convert · TowerLab' })
 
 const { loaded, status, error, loadFile, clear } = useRobloxFile()
 const { setSummary } = useDiagnostics()
-const target = ref<ConvertTarget>('clean-rbxm')
-const warnings = ref<ConversionWarning[]>([])
+
+const target = ref<TargetKit>('etoh-6')
+const shape = ref<OutputShape>('model')
+const warnings = ref<string[]>([])
 const converting = ref(false)
 const convertError = ref<string | null>(null)
 
-const targets: { id: ConvertTarget; label: string; hint?: string }[] = [
-	{ id: 'etoh-v6', label: 'EToH v6 Kit (.rbxm)' },
-	{ id: 'clean-rbxm', label: 'Clean .rbxm Package', hint: 'Ready' },
+const detection = computed(() =>
+	loaded.value ? detectSource(loaded.value.document) : null
+)
+const stats = computed(() =>
+	loaded.value ? documentStats(loaded.value.document) : null
+)
+const plan = computed(() =>
+	detection.value
+		? pipelineLabel(detection.value.kit, target.value, shape.value)
+		: ''
+)
+
+const statRows = computed(() => {
+	const value = stats.value
+	if (!value) return []
+	return [
+		['Instances', value.instances],
+		['Parts', value.parts],
+		['Obby parts', value.obbyParts],
+		['Client object parts', value.clientObjectParts],
+		['Frame parts', value.frameParts],
+		['Client objects', value.clientObjects],
+		['Floors', value.floors],
+		['Music zones', value.musicZones],
+		['Unique music', value.uniqueMusic],
+	] as const
+})
+
+const targets: { id: TargetKit; label: string }[] = [
+	{ id: 'etoh-6', label: 'EToH v6' },
+	{ id: 'jtoh-5.5', label: 'JToH 5.5' },
+]
+
+const shapes: { id: OutputShape; label: string; detail: string }[] = [
+	{
+		id: 'place',
+		label: 'Place',
+		detail: 'Place file with scripts for instant play.',
+	},
+	{
+		id: 'model',
+		label: 'Model',
+		detail: 'Model file with the tower kit and its music.',
+	},
 ]
 
 watch(
-	loaded,
-	(file) => {
+	[loaded, target, shape],
+	() => {
 		warnings.value = []
 		convertError.value = null
-		if (!file) {
+		const file = loaded.value
+		if (!file || !detection.value || !stats.value) {
 			setSummary('No file loaded.')
 			return
 		}
 		setSummary(
 			[
 				`File: ${file.name} (${file.size} bytes)`,
-				`Kind: ${file.kit.label}`,
+				`Kit: ${detection.value.label}`,
 				`Format: ${file.document.format}`,
-				`Instances: ${file.stats.instances}`,
-				`Obby parts: ${file.stats.obbyParts}`,
-				`Client object parts: ${file.stats.clientObjectParts}`,
-				`Frame parts: ${file.stats.frameParts}`,
-				`Total parts: ${file.stats.parts}`,
-				`Target: ${target.value}`,
+				`Plan: ${plan.value}`,
+				`Instances: ${stats.value.instances}`,
+				`Floors: ${stats.value.floors}`,
+				`Music zones: ${stats.value.musicZones}`,
+				`Unique music: ${stats.value.uniqueMusic}`,
 				error.value ? `Error: ${error.value}` : 'Error: none',
 			].join('\n')
 		)
@@ -48,26 +94,22 @@ watch(
 	{ immediate: true }
 )
 
-watch(target, (value) => {
-	if (!loaded.value) return
-	setSummary(
-		`File: ${loaded.value.name}\nTarget: ${value}\nKind: ${loaded.value.kit.label}`
-	)
-})
-
 async function convert() {
-	if (!loaded.value || converting.value) return
+	if (!loaded.value || !detection.value || converting.value) return
+	if (detection.value.kit === 'unknown') return
 	converting.value = true
 	convertError.value = null
-	const result = convertDocument(loaded.value.document, target.value)
-	warnings.value = result.warnings
+	const result = convertDocument(loaded.value.document, target.value, shape.value)
+	warnings.value = result.warnings.map((warning) => warning.message)
 	try {
 		if (!result.download) return
 		const bytes = await serializeRbxm(result.document)
-		downloadBytes(bytes, rbxmName(loaded.value.name))
+		const name =
+			shape.value === 'place' ? rbxlName(loaded.value.name) : rbxmName(loaded.value.name)
+		downloadBytes(bytes, name)
 	} catch (cause) {
 		convertError.value =
-			cause instanceof Error ? cause.message : "Couldn't write the .rbxm."
+			cause instanceof Error ? cause.message : "Couldn't write the file."
 	} finally {
 		converting.value = false
 	}
@@ -75,106 +117,109 @@ async function convert() {
 </script>
 
 <template>
-	<div
-		class="relative mx-auto flex w-full max-w-3xl flex-col px-4 py-10 md:py-16"
-	>
-		<div
-			class="pointer-events-none absolute left-1/2 top-32 h-80 w-80 -translate-x-1/2 rounded-full bg-mint/5 blur-3xl"
-		/>
-		<header class="mb-8 text-center">
-			<h1
-				class="font-display text-3xl font-semibold tracking-tight text-ink md:text-4xl"
-			>
-				Convert a tower file
-			</h1>
-			<p class="mt-2 text-sm text-muted md:text-base">
-				Repackage a place or model. EToH v6 conversion comes next.
-			</p>
+	<div class="mx-auto flex w-full max-w-xl flex-col gap-8 px-4 py-10">
+		<header>
+			<h1 class="font-display text-2xl font-semibold text-ink">Convert</h1>
 		</header>
 
-		<div class="flex flex-col gap-6">
+		<section class="flex flex-col gap-3">
+			<h2 class="text-sm text-dim">File</h2>
 			<FileDropzone
 				v-if="!loaded"
 				title="Drop a place or model file"
 				:busy="status === 'loading'"
 				@file="loadFile"
 			/>
-			<FileSummary
-				v-else
-				:file="loaded"
-				@clear="clear"
-			/>
-			<p
-				v-if="error"
-				class="text-center text-sm text-danger"
-			>
-				{{ error }}
-			</p>
-
-			<div class="flex flex-col gap-2">
-				<p class="px-1 text-sm text-dim">Target output</p>
-				<div
-					class="flex flex-col gap-1.5 rounded-xl bg-subtle p-1.5 sm:flex-row"
-				>
+			<div v-else class="flex flex-col gap-4">
+				<div class="flex items-start justify-between gap-3">
+					<div class="min-w-0">
+						<p class="truncate font-mono text-sm text-ink">{{ loaded.name }}</p>
+						<p class="mt-1 text-sm text-dim">
+							{{ formatBytes(loaded.size) }}
+							<span class="mx-1.5">·</span>
+							{{ loaded.document.format }}
+						</p>
+					</div>
 					<button
-						v-for="option in targets"
-						:key="option.id"
-						class="flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-center font-mono text-xs transition sm:text-sm"
-						:class="
-							target === option.id
-								? 'bg-raised text-ink shadow-sm'
-								: 'text-muted hover:text-ink'
-						"
+						class="text-sm text-dim hover:text-ink"
 						type="button"
-						@click="target = option.id"
+						@click="clear"
 					>
-						<span>{{ option.label }}</span>
-						<span
-							v-if="option.hint"
-							class="text-[10px] uppercase tracking-wider text-mint"
-							>{{ option.hint }}</span
-						>
+						Remove
 					</button>
 				</div>
+				<div>
+					<p class="text-xs uppercase tracking-wider text-dim">Kit</p>
+					<p class="mt-1 text-xl text-ink">{{ detection?.label }}</p>
+				</div>
+				<dl class="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
+					<template v-for="[label, value] in statRows" :key="label">
+						<dt class="text-dim">{{ label }}</dt>
+						<dd class="font-mono text-ink">{{ value }}</dd>
+					</template>
+				</dl>
 			</div>
+			<p v-if="error" class="text-sm text-danger">{{ error }}</p>
+		</section>
 
+		<section class="flex flex-col gap-2">
+			<h2 class="text-sm text-dim">Target version</h2>
+			<div class="flex gap-2">
+				<button
+					v-for="option in targets"
+					:key="option.id"
+					class="rounded-lg px-3 py-2 text-sm"
+					:class="target === option.id ? 'bg-subtle text-ink' : 'text-muted'"
+					type="button"
+					:aria-pressed="target === option.id"
+					@click="target = option.id"
+				>
+					{{ option.label }}
+				</button>
+			</div>
+			<p class="text-sm text-dim">
+				Every file is converted to EToH v6 first. JToH 5.5 is a downgrade from that.
+			</p>
+		</section>
+
+		<section class="flex flex-col gap-2">
+			<h2 class="text-sm text-dim">Output</h2>
+			<div class="flex gap-2">
+				<button
+					v-for="option in shapes"
+					:key="option.id"
+					class="rounded-lg px-3 py-2 text-sm"
+					:class="shape === option.id ? 'bg-subtle text-ink' : 'text-muted'"
+					type="button"
+					:aria-pressed="shape === option.id"
+					@click="shape = option.id"
+				>
+					{{ option.label }}
+				</button>
+			</div>
+			<p class="text-sm text-dim">
+				{{ shapes.find((option) => option.id === shape)?.detail }}
+			</p>
+		</section>
+
+		<section class="flex flex-col gap-3">
+			<p v-if="plan" class="font-mono text-sm text-ink">{{ plan }}</p>
 			<button
-				class="flex w-full items-center justify-center gap-2 rounded-xl bg-mint py-3.5 font-mono text-sm font-medium text-canvas shadow-mint transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+				class="rounded-lg bg-mint px-3 py-2 text-sm font-medium text-canvas disabled:cursor-not-allowed disabled:opacity-50"
 				type="button"
-				:disabled="!loaded || status === 'loading' || converting"
+				:disabled="!loaded || detection?.kit === 'unknown' || status === 'loading' || converting"
 				@click="convert"
 			>
-				{{ converting ? 'Working…' : 'Convert file' }}
-				<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+				{{ converting ? 'Working…' : 'Export' }}
 			</button>
-
-			<ul
-				v-if="warnings.length"
-				class="flex flex-col gap-2"
-			>
-				<li
-					v-for="warning in warnings"
-					:key="warning.message"
-					class="rounded-xl border border-border-subtle bg-subtle px-4 py-3 text-sm"
-					:class="warning.severity === 'warning' ? 'text-ink' : 'text-muted'"
-				>
-					{{ warning.message }}
-				</li>
-			</ul>
 			<p
-				v-if="convertError"
-				class="text-sm text-danger"
+				v-for="warning in warnings"
+				:key="warning"
+				class="text-sm text-ink"
 			>
-				{{ convertError }}
+				{{ warning }}
 			</p>
-
-			<p
-				class="flex items-center justify-center gap-2 pb-2 text-center text-sm text-dim"
-			>
-				<span class="material-symbols-outlined text-[16px]">lock</span>
-				All processing happens locally in your browser. Nothing is uploaded to
-				any server.
-			</p>
-		</div>
+			<p v-if="convertError" class="text-sm text-danger">{{ convertError }}</p>
+		</section>
 	</div>
 </template>

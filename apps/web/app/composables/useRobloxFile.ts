@@ -1,10 +1,4 @@
 import type { RbxDocument } from '@towerlab/dom-schema'
-import {
-	detectKit,
-	documentStats,
-	type DocumentStats,
-	type KitDetection,
-} from '../../../../packages/kit-engine/src'
 import { parseRobloxFile } from '@towerlab/wasm-bridge'
 
 const EXTENSIONS = ['.rbxl', '.rbxlx', '.rbxm', '.rbxmx']
@@ -13,8 +7,6 @@ export interface LoadedRobloxFile {
 	name: string
 	size: number
 	document: RbxDocument
-	stats: DocumentStats
-	kit: KitDetection
 }
 
 export function useRobloxFile() {
@@ -40,8 +32,6 @@ export function useRobloxFile() {
 				name: file.name,
 				size: file.size,
 				document,
-				stats: documentStats(document),
-				kit: detectKit(document),
 			}
 			status.value = 'ready'
 		} catch (cause) {

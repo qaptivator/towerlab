@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import type { RbxNode } from '@towerlab/dom-schema'
-import { documentTree, indexNodes, scriptBundle } from '../../../../packages/kit-engine/src'
+import {
+	detectSource,
+	documentStats,
+	documentTree,
+	indexNodes,
+	scriptBundle,
+} from '../../../../packages/kit-engine/src'
 import { serializeRbxm } from '@towerlab/wasm-bridge'
 import {
 	downloadBytes,
@@ -33,16 +39,22 @@ watch(
 			setSummary('No file loaded.')
 			return
 		}
+		const detection = detectSource(file.document)
+		const stats = documentStats(file.document)
 		setSummary(
 			[
 				`File: ${file.name} (${file.size} bytes)`,
-				`Kind: ${file.kit.label}`,
+				`Kit: ${detection.label}`,
 				`Format: ${file.document.format}`,
-				`Instances: ${file.stats.instances}`,
-				`Obby parts: ${file.stats.obbyParts}`,
-				`Client object parts: ${file.stats.clientObjectParts}`,
-				`Frame parts: ${file.stats.frameParts}`,
-				`Total parts: ${file.stats.parts}`,
+				`Instances: ${stats.instances}`,
+				`Obby parts: ${stats.obbyParts}`,
+				`Client object parts: ${stats.clientObjectParts}`,
+				`Frame parts: ${stats.frameParts}`,
+				`Client objects: ${stats.clientObjects}`,
+				`Floors: ${stats.floors}`,
+				`Music zones: ${stats.musicZones}`,
+				`Unique music: ${stats.uniqueMusic}`,
+				`Total parts: ${stats.parts}`,
 				file.document.diagnostics.length
 					? `Parser notes: ${file.document.diagnostics.slice(0, 8).join(' | ')}`
 					: 'Parser notes: none',

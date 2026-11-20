@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { RbxDocument, RbxNode } from "@towerlab/dom-schema";
-import { convertDocument, detectKit, documentForCleanModel, documentStats, documentTree, scriptBundle } from "./index";
+import {
+  convertDocument,
+  convertersFor,
+  detectSource,
+  documentStats,
+  documentTree,
+  pipelineLabel,
+  scriptBundle,
+} from "./index";
 
 function node(partial: Partial<RbxNode> & Pick<RbxNode, "id" | "className" | "name">): RbxNode {
   return {
@@ -50,7 +58,9 @@ describe("documentStats", () => {
       clientObjectParts: 0,
       frameParts: 0,
       clientObjects: 1,
-      frames: 2,
+      floors: 2,
+      musicZones: 0,
+      uniqueMusic: 0,
     });
   });
 
@@ -101,6 +111,49 @@ describe("documentStats", () => {
     expect(stats.clientObjectParts).toBe(2);
     expect(stats.frameParts).toBe(3);
     expect(stats.parts).toBe(11);
+    expect(stats.clientObjects).toBe(1);
+    expect(stats.floors).toBe(2);
+    expect(stats.musicZones).toBe(0);
+    expect(stats.uniqueMusic).toBe(0);
+  });
+
+  it("counts music zones and unique ids under the highest Music folder", () => {
+    const doc = document(
+      [
+        node({ id: "tower", className: "Model", name: "Tower", childIds: ["music"] }),
+        node({ id: "music", className: "Folder", name: "Music", parentId: "tower", childIds: ["z1", "z2", "z3"] }),
+        node({ id: "z1", className: "Part", name: "Zone1", parentId: "music", childIds: ["s1", "decoy"] }),
+        node({
+          id: "s1",
+          className: "Sound",
+          name: "Song",
+          parentId: "z1",
+          properties: { SoundId: { Content: "rbxassetid://1111" } },
+        }),
+        node({ id: "z2", className: "Part", name: "Zone2", parentId: "music", childIds: ["s2"] }),
+        node({
+          id: "s2",
+          className: "Sound",
+          name: "Song",
+          parentId: "z2",
+          properties: { SoundId: { ContentId: "rbxassetid://1111" } },
+        }),
+        node({
+          id: "z3",
+          className: "Part",
+          name: "Zone3",
+          parentId: "music",
+          properties: { Attributes: { Attributes: { Music: { String: "rbxassetid://2222" } } } },
+        }),
+        node({ id: "decoy", className: "Folder", name: "Music", parentId: "z1", childIds: ["extra"] }),
+        node({ id: "extra", className: "Part", name: "Extra", parentId: "decoy" }),
+      ],
+      ["tower"],
+    );
+
+    const stats = documentStats(doc);
+    expect(stats.musicZones).toBe(3);
+    expect(stats.uniqueMusic).toBe(2);
   });
 
   it("counts every Obby when several sit at the same depth", () => {
@@ -199,23 +252,36 @@ describe("scriptBundle", () => {
   });
 });
 
-describe("detectKit", () => {
-  it("recognizes a Tower Creator marker", () => {
+describe("detectSource", () => {
+  it("recognizes a Tower Creator marker before an EToH mention", () => {
     const doc = document(
       [
         node({
           id: "note",
           className: "StringValue",
           name: "Source",
-          properties: { Value: { String: "Exported by Tower Creator" } },
+          properties: { Value: { String: "Exported by Tower Creator for EToH" } },
         }),
       ],
       ["note"],
     );
-    expect(detectKit(doc).kind).toBe("tower-creator");
+    expect(detectSource(doc).kit).toBe("tower-creator");
   });
 
-  it("recognizes a place by its services", () => {
+  it("recognizes EToH v6 and JToH 5.5 from file text", () => {
+    const etoh = document(
+      [node({ id: "note", className: "StringValue", name: "Kit", properties: { Value: { String: "EToH kit version 6" } } })],
+      ["note"],
+    );
+    const jtoh = document(
+      [node({ id: "note", className: "StringValue", name: "Kit", properties: { Value: { String: "JToH 5.5" } } })],
+      ["note"],
+    );
+    expect(detectSource(etoh).kit).toBe("etoh-6");
+    expect(detectSource(jtoh).kit).toBe("jtoh-5.5");
+  });
+
+  it("does not treat a plain place as a kit", () => {
     const doc = document(
       [
         node({ id: "ws", className: "Workspace", name: "Workspace" }),
@@ -223,33 +289,48 @@ describe("detectKit", () => {
       ],
       ["ws", "light"],
     );
-    expect(detectKit(doc).kind).toBe("roblox-place");
+    expect(detectSource(doc).kit).toBe("unknown");
   });
 });
 
 describe("conversion", () => {
-  it("unwraps a DataModel for a clean model export", () => {
+  it("routes every source through v6, then downgrades only when asked", () => {
+    expect(convertersFor("tower-creator", "etoh-6")).toEqual(["tower-creator->etoh-6"]);
+    expect(convertersFor("tower-creator", "jtoh-5.5")).toEqual(["tower-creator->etoh-6", "etoh-6->jtoh-5.5"]);
+    expect(convertersFor("jtoh-5.5", "etoh-6")).toEqual(["jtoh-5.5->etoh-6"]);
+    expect(convertersFor("jtoh-5.5", "jtoh-5.5")).toEqual(["jtoh-5.5->etoh-6", "etoh-6->jtoh-5.5"]);
+    expect(convertersFor("etoh-6", "etoh-6")).toEqual([]);
+    expect(convertersFor("etoh-6", "jtoh-5.5")).toEqual(["etoh-6->jtoh-5.5"]);
+    expect(pipelineLabel("tower-creator", "jtoh-5.5", "place")).toBe("Tower Creator → EToH v6 → JToH 5.5 → place");
+  });
+
+  it("stops on the first converter that is not written yet", () => {
     const doc = document(
-      [
-        node({ id: "game", className: "DataModel", name: "Place1", childIds: ["ws"] }),
-        node({ id: "ws", className: "Workspace", name: "Workspace", parentId: "game" }),
-      ],
-      ["game"],
+      [node({ id: "note", className: "StringValue", name: "Source", properties: { Value: { String: "Tower Creator" } } })],
+      ["note"],
     );
-    expect(documentForCleanModel(doc).rootIds).toEqual(["ws"]);
-  });
-
-  it("does not pretend an EToH conversion succeeded", () => {
-    const doc = document([node({ id: "m", className: "Model", name: "Tower" })], ["m"]);
-    const result = convertDocument(doc, "etoh-v6");
+    const result = convertDocument(doc, "jtoh-5.5", "model");
     expect(result.download).toBe(false);
-    expect(result.warnings.some((warning) => warning.severity === "warning")).toBe(true);
+    expect(result.steps).toEqual(["tower-creator->etoh-6", "etoh-6->jtoh-5.5"]);
+    expect(result.warnings[0]?.message).toContain("Tower Creator to EToH v6");
+    expect(result.document).toBe(doc);
   });
 
-  it("allows a clean rbxm download", () => {
+  it("reports packaging when the file is already v6 and the target stays v6", () => {
+    const doc = document(
+      [node({ id: "note", className: "StringValue", name: "Kit", properties: { Value: { String: "EToH" } } })],
+      ["note"],
+    );
+    const result = convertDocument(doc, "etoh-6", "place");
+    expect(result.download).toBe(false);
+    expect(result.steps).toEqual([]);
+    expect(result.warnings[0]?.message).toContain("Place export");
+  });
+
+  it("refuses an unrecognized file", () => {
     const doc = document([node({ id: "m", className: "Model", name: "Tower" })], ["m"]);
-    const result = convertDocument(doc, "clean-rbxm");
-    expect(result.download).toBe(true);
-    expect(result.warnings).toEqual([]);
+    const result = convertDocument(doc, "etoh-6", "model");
+    expect(result.source).toBe("unknown");
+    expect(result.download).toBe(false);
   });
 });

@@ -93,6 +93,10 @@ export function rbxmName(filename: string): string {
   return `${fileStem(filename)}.rbxm`;
 }
 
+export function rbxlName(filename: string): string {
+  return `${fileStem(filename)}.rbxl`;
+}
+
 export function jsonName(filename: string, suffix: string): string {
   return `${fileStem(filename)}.${suffix}.json`;
 }
