@@ -1,3 +1,6 @@
 [workspace]
-members = ["crates/rbx_dom_wasm"]
+members = ["crates/rbx_dom_wasm", "crates/rbx_dom_weak"]
 resolver = "2"
+
+[patch.crates-io]
+rbx_dom_weak = { path = "crates/rbx_dom_weak" }
