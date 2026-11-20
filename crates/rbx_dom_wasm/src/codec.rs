@@ -2,9 +2,11 @@ use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 
 use rbx_dom_weak::{InstanceBuilder, WeakDom};
-use rbx_types::{Ref, Variant};
+use rbx_types::Ref;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+use crate::json_value::{variant_from_json, variant_to_json};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -121,7 +123,7 @@ fn walk(
     let mut properties = BTreeMap::new();
 
     for (key, value) in &instance.properties {
-        match serde_json::to_value(value) {
+        match variant_to_json(value) {
             Ok(json) => {
                 properties.insert(key.to_string(), json);
             }
@@ -185,7 +187,7 @@ fn build_instance(
         .with_name(&node.name);
 
     for (key, value) in &node.properties {
-        let variant: Variant = serde_json::from_value(value.clone()).map_err(|error| {
+        let variant = variant_from_json(value).map_err(|error| {
             format!(
                 "Couldn't restore property {key} on {} ({}): {error}",
                 node.name, node.class_name
@@ -205,7 +207,7 @@ fn build_instance(
 mod tests {
     use super::*;
     use rbx_dom_weak::InstanceBuilder;
-    use rbx_types::Variant;
+    use rbx_types::{Attributes, Variant};
 
     fn sample_model_bytes() -> Vec<u8> {
         let part = InstanceBuilder::new("Part")
@@ -240,6 +242,69 @@ mod tests {
         let floor = again.nodes.iter().find(|node| node.name == "Floor").unwrap();
         let anchored = floor.properties.get("Anchored").unwrap();
         assert_eq!(anchored, &serde_json::to_value(Variant::Bool(true)).unwrap());
+    }
+
+    #[test]
+    fn keeps_infinite_floats_across_a_roundtrip() {
+        let gui = InstanceBuilder::new("BillboardGui")
+            .with_name("ArrowGui")
+            .with_property("MaxDistance", f32::INFINITY);
+        let dom = WeakDom::new(gui);
+        let mut bytes = Vec::new();
+        rbx_binary::to_writer(&mut bytes, &dom, &[dom.root_ref()]).unwrap();
+
+        let document = parse_bytes(&bytes).unwrap();
+        let gui = document.nodes.iter().find(|node| node.name == "ArrowGui").unwrap();
+        assert_eq!(
+            gui.properties.get("MaxDistance").unwrap(),
+            &serde_json::json!({ "Float32": "Infinity" })
+        );
+
+        let again = parse_bytes(&serialize_rbxm_bytes(&document).unwrap()).unwrap();
+        let gui = again.nodes.iter().find(|node| node.name == "ArrowGui").unwrap();
+        assert_eq!(
+            gui.properties.get("MaxDistance").unwrap(),
+            &serde_json::json!({ "Float32": "Infinity" })
+        );
+    }
+
+    #[test]
+    fn keeps_infinite_attribute_numbers() {
+        let attributes = Attributes::new().with("Uses", f64::INFINITY);
+        let part = InstanceBuilder::new("Part")
+            .with_name("DialogPart")
+            .with_property("Attributes", attributes);
+        let dom = WeakDom::new(part);
+        let mut bytes = Vec::new();
+        rbx_binary::to_writer(&mut bytes, &dom, &[dom.root_ref()]).unwrap();
+
+        let document = parse_bytes(&bytes).unwrap();
+        let again = parse_bytes(&serialize_rbxm_bytes(&document).unwrap()).unwrap();
+        let part = again.nodes.iter().find(|node| node.name == "DialogPart").unwrap();
+        assert_eq!(
+            part.properties.get("Attributes").unwrap()["Attributes"]["Uses"]["Float64"],
+            "Infinity"
+        );
+    }
+
+    #[test]
+    fn etoh_kit_properties_survive_a_roundtrip_when_the_file_is_present() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../.dev/etoh-kit-version-6.1.3.rbxl"
+        );
+        let Ok(bytes) = std::fs::read(path) else {
+            return;
+        };
+        let document = parse_bytes(&bytes).unwrap();
+        assert!(document.nodes.iter().any(|node| node.properties.len() > 10));
+        let again = parse_bytes(&serialize_rbxm_bytes(&document).unwrap()).unwrap();
+        assert_eq!(again.nodes.len(), document.nodes.len());
+        let before = document.nodes.iter().find(|node| node.name == "Heal Brick").unwrap();
+        let after = again.nodes.iter().find(|node| node.name == "Heal Brick").unwrap();
+        assert_eq!(before.properties.get("Anchored"), after.properties.get("Anchored"));
+        assert!(before.properties.contains_key("CFrame"));
+        assert!(after.properties.contains_key("CFrame"));
     }
 
     #[test]
