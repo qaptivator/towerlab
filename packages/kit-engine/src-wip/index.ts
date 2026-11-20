@@ -135,3 +135,72 @@ export function documentTree(
 	}
 	return trees
 }
+
+const SCRIPT_CLASSES = new Set(['Script', 'LocalScript', 'ModuleScript'])
+
+/**
+ * Every script under `rootIds`, in tree order, as one text file.
+ * Source is the decoded string, so newlines and tabs are real characters.
+ */
+export function scriptBundle(
+	document: RbxDocument,
+	rootIds: string[] = document.rootIds
+): string {
+	const byId = indexNodes(document)
+	const blocks: string[] = []
+	const visit = (id: string, trail: Set<string>) => {
+		if (trail.has(id)) return
+		const node = byId.get(id)
+		if (!node) return
+		if (SCRIPT_CLASSES.has(node.className)) {
+			blocks.push(formatScriptBlock(node, instancePath(node, byId)))
+		}
+		const next = new Set(trail)
+		next.add(id)
+		for (const childId of node.childIds) visit(childId, next)
+	}
+	for (const id of rootIds) visit(id, new Set())
+	return blocks.join('\n')
+}
+
+function formatScriptBlock(node: RbxNode, path: string): string {
+	const rule = '-'.repeat(80)
+	const source = scriptSource(node.properties)
+	const body = source.endsWith('\n') || source.length === 0 ? source : `${source}\n`
+	return `${rule}\npath: ${path}\nname: ${node.name}\nclass: ${node.className}\n${rule}\n${body}`
+}
+
+function instancePath(node: RbxNode, byId: Map<string, RbxNode>): string {
+	const names: string[] = []
+	const seen = new Set<string>()
+	let current: RbxNode | undefined = node
+	while (current && !seen.has(current.id)) {
+		seen.add(current.id)
+		names.push(current.name)
+		current = current.parentId ? byId.get(current.parentId) : undefined
+	}
+	return names.reverse().join('/')
+}
+
+function scriptSource(properties: Record<string, RbxPropertyValue>): string {
+	const tagged = properties.Source
+	if (!tagged) return ''
+	if (typeof tagged.String === 'string') return tagged.String
+	const binary = tagged.BinaryString
+	if (typeof binary === 'string') return decodeBinaryString(binary)
+	if (Array.isArray(binary) && binary.every((item) => typeof item === 'number')) {
+		return new TextDecoder().decode(Uint8Array.from(binary))
+	}
+	return ''
+}
+
+function decodeBinaryString(value: string): string {
+	if (!value || value.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) return value
+	try {
+		const raw = atob(value)
+		const bytes = Uint8Array.from(raw, (char) => char.charCodeAt(0))
+		return new TextDecoder().decode(bytes)
+	} catch {
+		return value
+	}
+}

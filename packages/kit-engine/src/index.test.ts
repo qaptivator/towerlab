@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RbxDocument, RbxNode } from "@towerlab/dom-schema";
-import { convertDocument, detectKit, documentForCleanModel, documentStats, documentTree } from "./index";
+import { convertDocument, detectKit, documentForCleanModel, documentStats, documentTree, scriptBundle } from "./index";
 
 function node(partial: Partial<RbxNode> & Pick<RbxNode, "id" | "className" | "name">): RbxNode {
   return {
@@ -164,6 +164,38 @@ describe("documentTree", () => {
         children: [],
       },
     ]);
+  });
+});
+
+describe("scriptBundle", () => {
+  it("writes each script with a path header and real newlines", () => {
+    const doc = document(
+      [
+        node({ id: "model", className: "Model", name: "Kit", childIds: ["mod"] }),
+        node({
+          id: "mod",
+          className: "ModuleScript",
+          name: "ClientObjectScript",
+          parentId: "model",
+          properties: { Source: { String: "return function()\n\tprint(1)\nend" } },
+        }),
+      ],
+      ["model"],
+    );
+
+    expect(scriptBundle(doc)).toBe(
+      [
+        "-".repeat(80),
+        "path: Kit/ClientObjectScript",
+        "name: ClientObjectScript",
+        "class: ModuleScript",
+        "-".repeat(80),
+        "return function()",
+        "\tprint(1)",
+        "end",
+        "",
+      ].join("\n"),
+    );
   });
 });
 

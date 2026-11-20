@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { RbxDocument, RbxNode } from '@towerlab/dom-schema'
-import { indexNodes, isBasePart } from '../../../../packages/kit-engine/src-2'
+import { indexNodes, isBasePart } from '../../../../packages/kit-engine/src'
 
 const props = defineProps<{
 	document: RbxDocument

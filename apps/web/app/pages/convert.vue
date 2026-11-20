@@ -3,7 +3,7 @@ import {
 	convertDocument,
 	type ConvertTarget,
 	type ConversionWarning,
-} from '../../../../packages/kit-engine/src-2'
+} from '../../../../packages/kit-engine/src'
 import { serializeRbxm } from '@towerlab/wasm-bridge'
 import { downloadBytes, rbxmName } from '../utils/format'
 

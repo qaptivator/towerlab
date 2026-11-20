@@ -58,6 +58,10 @@ export function downloadJson(value: unknown, filename: string) {
   downloadBlob(new Blob([text], { type: "application/json" }), filename);
 }
 
+export function downloadText(text: string, filename: string) {
+  downloadBlob(new Blob([text], { type: "text/plain;charset=utf-8" }), filename);
+}
+
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -73,6 +77,10 @@ export function rbxmName(filename: string): string {
 
 export function jsonName(filename: string, suffix: string): string {
   return `${fileStem(filename)}.${suffix}.json`;
+}
+
+export function textName(filename: string, suffix: string): string {
+  return `${fileStem(filename)}.${suffix}.txt`;
 }
 
 function fileStem(filename: string): string {

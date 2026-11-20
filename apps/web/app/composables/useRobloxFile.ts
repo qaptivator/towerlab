@@ -3,8 +3,8 @@ import {
 	detectKit,
 	documentStats,
 	type DocumentStats,
-	type SourceKit,
-} from '../../../../packages/kit-engine/src-2'
+	type KitDetection,
+} from '../../../../packages/kit-engine/src'
 import { parseRobloxFile } from '@towerlab/wasm-bridge'
 
 const EXTENSIONS = ['.rbxl', '.rbxlx', '.rbxm', '.rbxmx']
@@ -14,7 +14,7 @@ export interface LoadedRobloxFile {
 	size: number
 	document: RbxDocument
 	stats: DocumentStats
-	kit: SourceKit
+	kit: KitDetection
 }
 
 export function useRobloxFile() {

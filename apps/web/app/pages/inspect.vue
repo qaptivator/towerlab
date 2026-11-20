@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import type { RbxNode } from '@towerlab/dom-schema'
-import { documentTree, indexNodes } from '../../../../packages/kit-engine/src-2'
+import { documentTree, indexNodes, scriptBundle } from '../../../../packages/kit-engine/src'
 import { serializeRbxm } from '@towerlab/wasm-bridge'
 import {
 	downloadBytes,
 	downloadJson,
+	downloadText,
 	jsonName,
 	rbxmName,
+	textName,
 } from '../utils/format'
 
 useHead({ title: 'Inspect · TowerLab' })
@@ -65,6 +67,11 @@ function exportSelection() {
 		documentTree(loaded.value.document, [selectedId.value]),
 		jsonName(loaded.value.name, 'selection')
 	)
+}
+
+function exportScripts() {
+	if (!loaded.value) return
+	downloadText(scriptBundle(loaded.value.document), textName(loaded.value.name, 'scripts'))
 }
 
 async function download() {
@@ -162,6 +169,13 @@ function reset() {
 					@click="exportSelection"
 				>
 					Export selection
+				</button>
+				<button
+					class="rounded-xl bg-raised px-4 py-2.5 font-mono text-sm text-ink hover:bg-container-high"
+					type="button"
+					@click="exportScripts"
+				>
+					Export scripts
 				</button>
 				<button
 					class="rounded-xl bg-mint px-4 py-2.5 font-mono text-sm font-medium text-canvas shadow-mint transition active:scale-[0.99] disabled:opacity-60"
