@@ -1,6 +1,9 @@
 import type { RbxDocument } from "@towerlab/dom-schema";
 import { detectSource, sourceLabel } from "./detect";
+import { convertJtoh55ToV6, upgradeV6To613Document } from "./etoh-v613";
 import type { ConversionResult, ConverterId, OutputShape, SourceKit, TargetKit } from "./types";
+
+export { convertJtoh55ToV6, upgradeV6To613Document };
 
 /**
  * Pipeline, once the bodies exist:
@@ -42,11 +45,6 @@ export function convertTowerCreatorToV6(document: RbxDocument): RbxDocument {
   throw new ConverterNotReady("Tower Creator to EToH v6 is not written yet.", "tower-creator->etoh-6");
 }
 
-export function convertJtoh55ToV6(document: RbxDocument): RbxDocument {
-  void document;
-  throw new ConverterNotReady("JToH 5.5 to EToH v6 is not written yet.", "jtoh-5.5->etoh-6");
-}
-
 export function convertV6ToJtoh55(document: RbxDocument): RbxDocument {
   void document;
   throw new ConverterNotReady("EToH v6 to JToH 5.5 is not written yet.", "etoh-6->jtoh-5.5");
@@ -76,11 +74,12 @@ export function convertDocument(document: RbxDocument, target: TargetKit, shape:
     };
   }
 
+  let current = document;
   try {
-    let current = document;
     for (const step of steps) current = RUNNERS[step](current);
-    current = packageForOutput(current, shape);
-    return { ...base, document: current, download: true, warnings: [] };
+    // A file that is already v6 still needs the 6.0.x -> 6.1.3 patch.
+    // 5.5 runs that patch inside convertJtoh55ToV6.
+    if (source === "etoh-6" && target === "etoh-6") current = upgradeV6To613Document(current);
   } catch (error) {
     if (error instanceof ConverterNotReady) {
       return {
@@ -91,4 +90,25 @@ export function convertDocument(document: RbxDocument, target: TargetKit, shape:
     }
     throw error;
   }
+
+  try {
+    current = packageForOutput(current, shape);
+  } catch (error) {
+    if (error instanceof ConverterNotReady) {
+      return {
+        ...base,
+        document: current,
+        download: true,
+        warnings: [
+          {
+            severity: "info",
+            message: `${error.message} Exported the converted kit without place scripts or model bundling.`,
+          },
+        ],
+      };
+    }
+    throw error;
+  }
+
+  return { ...base, document: current, download: true, warnings: [] };
 }

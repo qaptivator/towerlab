@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { RbxDocument, RbxNode } from "@towerlab/dom-schema";
 import {
   convertDocument,
+  convertJtoh55ToV6,
   convertersFor,
   detectSource,
   documentStats,
   documentTree,
+  openDom,
   pipelineLabel,
   scriptBundle,
 } from "./index";
@@ -281,6 +283,26 @@ describe("detectSource", () => {
     expect(detectSource(jtoh).kit).toBe("jtoh-5.5");
   });
 
+  it("treats a ClientSidedObjects kit as JToH 5.5 unless it is already stamped as v6", () => {
+    const legacy = document(
+      [node({ id: "cos", className: "Folder", name: "ClientSidedObjects" })],
+      ["cos"],
+    );
+    const stamped = document(
+      [
+        node({
+          id: "cos",
+          className: "Folder",
+          name: "ClientSidedObjects",
+          properties: { Attributes: { Attributes: { KitVersion: { String: "6.0.2" } } } },
+        }),
+      ],
+      ["cos"],
+    );
+    expect(detectSource(legacy).kit).toBe("jtoh-5.5");
+    expect(detectSource(stamped).kit).toBe("etoh-6");
+  });
+
   it("does not treat a plain place as a kit", () => {
     const doc = document(
       [
@@ -322,9 +344,27 @@ describe("conversion", () => {
       ["note"],
     );
     const result = convertDocument(doc, "etoh-6", "place");
-    expect(result.download).toBe(false);
+    expect(result.download).toBe(true);
     expect(result.steps).toEqual([]);
     expect(result.warnings[0]?.message).toContain("Place export");
+    expect(result.document).not.toBe(doc);
+  });
+
+  it("turns a JToH 5.5 ClientSidedObjects tree into a v6.1.3 kit", () => {
+    const doc = document(
+      [
+        node({ id: "tower", className: "Model", name: "My Tower", childIds: ["cos", "part"] }),
+        node({ id: "cos", className: "Folder", name: "ClientSidedObjects", parentId: "tower" }),
+        node({ id: "part", className: "Part", name: "Floor", parentId: "tower" }),
+      ],
+      ["tower"],
+    );
+    const converted = openDom(convertJtoh55ToV6(doc));
+    const root = converted.FindFirstChild("TowerKit");
+    const client = root?.FindFirstChild("ClientSidedObjects");
+    expect(root?.GetAttribute("OriginalName")).toBe("My Tower");
+    expect(client?.GetAttribute("KitVersion")).toBe("6.1.3");
+    expect(client?.FindFirstChild("DistanceCulling")?.ClassName).toBe("Folder");
   });
 
   it("refuses an unrecognized file", () => {

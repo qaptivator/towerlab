@@ -24,6 +24,7 @@ export {
   convertJtoh55ToV6,
   convertTowerCreatorToV6,
   convertV6ToJtoh55,
+  upgradeV6To613Document,
   convertersFor,
   packageForOutput,
   pipelineLabel,

@@ -4,15 +4,17 @@ This is the API for writing tower-kit converters. The page calls one function, `
 
 ## Where the code goes
 
-Implement these three functions. They currently throw `ConverterNotReady`. Replace the throw with a real body.
+`convertJtoh55ToV6` is implemented in `packages/kit-engine/src/etoh-v613.ts`. It turns a JToH 5.5 tree into EToH v6.1.3. `upgradeV6To613Document` in that file patches an existing v6.0.x–v6.1.2 kit to v6.1.3. The runner calls it when the source and target are both `etoh-6`.
+
+These two still throw `ConverterNotReady`. Replace the throw with a real body.
 
 | Function | Input | Output |
 | --- | --- | --- |
 | `convertTowerCreatorToV6` | Tower Creator document | EToH v6 document |
-| `convertJtoh55ToV6` | JToH 5.5 document | EToH v6 document |
+| `convertJtoh55ToV6` | JToH 5.5 document | EToH v6.1.3 document. Already written. |
 | `convertV6ToJtoh55` | EToH v6 document | JToH 5.5 document |
 
-They live in `packages/kit-engine/src/convert.ts`. A longer transform can move to a sibling file and be called from there. `convertDocument` in that same file is the runner. It is already wired to the convert page. Leave its step order alone.
+`convertTowerCreatorToV6` and `convertV6ToJtoh55` live in `packages/kit-engine/src/convert.ts`. The JToH 5.5 body lives in `etoh-v613.ts` and is re-exported from there. `convertDocument` is the runner. It is already wired to the convert page. Leave its step order alone.
 
 `packageForOutput` is not a kit converter. Place export adds instant-play scripts. Model export writes the kit and its music. Keep that work in `packageForOutput`.
 
@@ -22,7 +24,7 @@ There is no middleman format for client objects. Build the v6 instances in the t
 
 `convertDocument(document, target, shape)` detects the source, then:
 
-1. Tower Creator or JToH 5.5 is converted to EToH v6. An EToH v6 file skips this step.
+1. Tower Creator or JToH 5.5 is converted to EToH v6.1.3. An EToH v6 file skips the 5.5 rewrite and runs `upgradeV6To613Document` instead.
 2. If `target` is `jtoh-5.5`, the v6 document is downgraded.
 3. `packageForOutput` runs for `place` or `model`.
 
@@ -34,13 +36,15 @@ So a JToH 5.5 file exported back to JToH 5.5 still goes up to v6 and back down. 
 | `tower-creator` | `jtoh-5.5` | `tower-creator->etoh-6`, then `etoh-6->jtoh-5.5` |
 | `jtoh-5.5` | `etoh-6` | `jtoh-5.5->etoh-6` |
 | `jtoh-5.5` | `jtoh-5.5` | `jtoh-5.5->etoh-6`, then `etoh-6->jtoh-5.5` |
-| `etoh-6` | `etoh-6` | none, then packaging |
+| `etoh-6` | `etoh-6` | `upgradeV6To613Document`, then packaging |
 | `etoh-6` | `jtoh-5.5` | `etoh-6->jtoh-5.5` |
 | `unknown` | either | no converters, `download: false` |
 
 Each function receives the document returned by the previous step. `convertV6ToJtoh55` must accept both a real EToH v6 file and the document produced by either up-converter.
 
-Return the next document. Throw `ConverterNotReady` only while the body is still missing. Any other throw escapes the page as a failed export. On `ConverterNotReady`, the runner returns the original document and does not download.
+Return the next document. Throw `ConverterNotReady` only while that step is still missing. Any other throw escapes the page as a failed export. On `ConverterNotReady` during a kit step, the runner returns the original document and does not download.
+
+`packageForOutput` still throws. When the kit steps succeed and packaging is the thing that throws, the runner downloads the converted kit anyway and adds an info warning. Place scripts and model bundling are not in that file yet.
 
 `TargetKit` is `"etoh-6" | "jtoh-5.5"`. Tower Creator and `unknown` are not write targets.
 
@@ -138,6 +142,7 @@ Names match Roblox. Lookups are case-sensitive. Child order is `childIds` order.
 | --- | --- |
 | `Id` | Stable referent. Read-only. |
 | `ClassName` | Read-only. There is no class change. |
+| `IsDestroyed` | True after `Destroy`, including for an instance still held from an earlier `GetDescendants()`. |
 | `Name` / `Name =` | Node name. If `properties.Name` is `{ String }`, the setter updates that too. |
 | `Parent` / `Parent =` | `null` unparents. The instance is dropped from `toDocument()` unless you parent it again or it is still a root. Setting `Parent` appends it to the new parent's children. |
 | `FindFirstChild(name, recursive?)` | Default `recursive` is false. |
@@ -224,7 +229,7 @@ These are for the page, detection, and tests. Converters do not have to call the
 
 `SourceKit` is `"etoh-6" | "jtoh-5.5" | "tower-creator" | "unknown"`. `OutputShape` is `"place" | "model"`. `AttributeValue` is `string | number | boolean | RbxPropertyValue`.
 
-`ConversionResult` is `{ document, warnings, download, source, target, shape, steps }`. `download` stays false while a converter or the packager still throws `ConverterNotReady`.
+`ConversionResult` is `{ document, warnings, download, source, target, shape, steps }`. `download` is false when a kit step throws `ConverterNotReady` or the source is `unknown`. It is true when the kit steps finished, even if `packageForOutput` is still unimplemented.
 
 ## Tests
 

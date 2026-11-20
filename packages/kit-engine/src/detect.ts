@@ -1,6 +1,6 @@
 import type { RbxDocument } from "@towerlab/dom-schema";
 import type { SourceDetection, SourceKit } from "./types";
-import { collectSearchText } from "./text";
+import { collectSearchText, normalizeName } from "./text";
 
 export function sourceLabel(kit: SourceKit): string {
   switch (kit) {
@@ -18,21 +18,44 @@ export function sourceLabel(kit: SourceKit): string {
 /** Kit family, from the file's own text. Place versus model is not a kit. */
 export function detectSource(document: RbxDocument): SourceDetection {
   const text = collectSearchText(document);
-  const kit = kitFromText(text);
+  const names = new Set(document.nodes.map((node) => normalizeName(node.name)));
+  const kit = kitFromText(text, names, hasV6Marker(document));
   return { kit, label: sourceLabel(kit) };
 }
 
-function kitFromText(text: string): SourceKit {
+function kitFromText(text: string, names: Set<string>, v6Marker: boolean): SourceKit {
   if (text.includes("tower creator") || text.includes("towercreator")) return "tower-creator";
-  if (isJtoh55(text)) return "jtoh-5.5";
-  if (isEtoh6(text)) return "etoh-6";
+  // v6 wins over leftover 5.5 script names so a converted kit is not run through 5.5 again.
+  if (v6Marker || isEtoh6(text)) return "etoh-6";
+  if (isJtoh55(text, names)) return "jtoh-5.5";
   return "unknown";
 }
 
-function isJtoh55(text: string): boolean {
+function hasV6Marker(document: RbxDocument): boolean {
+  for (const node of document.nodes) {
+    const attributes = node.properties.Attributes?.Attributes;
+    if (attributes && typeof attributes === "object" && !Array.isArray(attributes) && "KitVersion" in attributes) {
+      return true;
+    }
+    const tags = node.properties.Tags?.Tags;
+    if (Array.isArray(tags) && tags.some((tag) => typeof tag === "string" && tag.startsWith("CO_"))) return true;
+  }
+  return false;
+}
+
+function isJtoh55(text: string, names: Set<string>): boolean {
+  if (
+    names.has("clientobjectscript") ||
+    names.has("distanceanchoringobjects") ||
+    names.has("clientobject") ||
+    names.has("clientsidedobjects")
+  ) {
+    return true;
+  }
   if (text.includes("jtoh") || text.includes("juke's towers") || text.includes("jukes towers") || text.includes("juke’s towers")) {
     return true;
   }
+  if (text.includes("clientobjectscript") || text.includes("distanceanchoringobjects")) return true;
   return text.includes("5.5") && (text.includes("kit") || text.includes("version"));
 }
 

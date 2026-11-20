@@ -157,6 +157,12 @@ export class RbxInstance {
     return this.live().className;
   }
 
+  /** True after Destroy, including while a snapshot of GetDescendants is still in hand. */
+  get IsDestroyed(): boolean {
+    const node = this.dom.nodes.get(this.Id);
+    return !node || node.destroyed;
+  }
+
   get Name(): string {
     return this.live().name;
   }
