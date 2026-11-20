@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { RbxDocument, RbxNode } from "@towerlab/dom-schema";
-import { indexNodes } from "@towerlab/kit-engine";
+import { indexNodes, isBasePart } from "@towerlab/kit-engine";
 
 const props = defineProps<{
   document: RbxDocument;
@@ -91,14 +91,45 @@ function nodeOf(id: string): RbxNode | undefined {
   return byId.value.get(id);
 }
 
-function iconFor(className: string): string {
-  if (className === "Folder") return "folder";
-  if (className === "Model") return "account_tree";
-  if (className.includes("Script")) return "code";
-  if (className.endsWith("Part") || className.includes("Operation") || className === "Seat" || className === "SpawnLocation") {
-    return "category";
-  }
-  return "data_object";
+const FOLDER = "#E6C15A";
+const PART = "#C8C8C8";
+const MODEL = "#6EA8FE";
+const SCRIPT = "#F4F4F5";
+const LOCAL_SCRIPT = "#5B9DFF";
+const MODULE_SCRIPT = "#C084FC";
+const STUDIO_BLUE = "#5B9DFF";
+const NEUTRAL = "#71717A";
+
+const GUI_CLASSES = new Set([
+  "Frame",
+  "ScrollingFrame",
+  "CanvasGroup",
+  "TextLabel",
+  "TextButton",
+  "TextBox",
+  "ImageLabel",
+  "ImageButton",
+  "ViewportFrame",
+  "VideoFrame",
+]);
+
+const EFFECT_CLASSES = new Set(["ParticleEmitter", "Beam", "Trail", "Fire", "Smoke", "Sparkles"]);
+
+function isGui(className: string): boolean {
+  return className.endsWith("Gui") || className.startsWith("UI") || GUI_CLASSES.has(className);
+}
+
+function iconFor(className: string): { name: string; color: string } {
+  if (className === "Folder") return { name: "folder", color: FOLDER };
+  if (className === "Model") return { name: "account_tree", color: MODEL };
+  if (className === "ModuleScript") return { name: "integration_instructions", color: MODULE_SCRIPT };
+  if (className === "LocalScript") return { name: "code", color: LOCAL_SCRIPT };
+  if (className === "Script") return { name: "description", color: SCRIPT };
+  if (className === "Attachment" || EFFECT_CLASSES.has(className)) return { name: "adjust", color: STUDIO_BLUE };
+  if (isGui(className)) return { name: "web_asset", color: STUDIO_BLUE };
+  if (className === "Configuration") return { name: "settings", color: PART };
+  if (isBasePart(className)) return { name: "category", color: PART };
+  return { name: "data_object", color: NEUTRAL };
 }
 </script>
 
@@ -126,7 +157,7 @@ function iconFor(className: string): string {
         type="button"
         @click="emit('select', node.id)"
       >
-        <span class="material-symbols-outlined text-[16px] text-dim">{{ iconFor(node.className) }}</span>
+        <span class="material-symbols-outlined text-[16px]" :style="{ color: iconFor(node.className).color }">{{ iconFor(node.className).name }}</span>
         <span class="truncate font-mono text-sm">{{ node.name }}</span>
         <span class="ml-auto shrink-0 font-mono text-[11px] text-dim">{{ node.className }}</span>
       </button>
@@ -152,7 +183,7 @@ function iconFor(className: string): string {
               {{ row.open ? "expand_more" : "chevron_right" }}
             </span>
           </span>
-          <span class="material-symbols-outlined text-[16px] text-dim">{{ iconFor(nodeOf(row.id)?.className ?? "") }}</span>
+          <span class="material-symbols-outlined text-[16px]" :style="{ color: iconFor(nodeOf(row.id)?.className ?? '').color }">{{ iconFor(nodeOf(row.id)?.className ?? '').name }}</span>
           <span class="truncate font-mono text-sm">{{ nodeOf(row.id)?.name }}</span>
           <span class="ml-auto hidden shrink-0 font-mono text-[11px] text-dim sm:inline">{{ nodeOf(row.id)?.className }}</span>
         </button>

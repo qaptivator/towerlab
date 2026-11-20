@@ -41,11 +41,29 @@ const FRAME_CONTAINERS = new Set([
   "towersections",
 ]);
 
+const OBBY_CONTAINERS = new Set(["obby"]);
+const FRAME_PART_CONTAINERS = new Set(["frame", "frames"]);
+
 export interface DocumentStats {
   instances: number;
+  /** BaseParts anywhere in the file. */
   parts: number;
+  /** BaseParts under the shallowest instance named Obby. */
+  obbyParts: number;
+  /** BaseParts under the shallowest ClientSidedObjects folder. */
+  clientObjectParts: number;
+  /** BaseParts under the shallowest Frame folder, including nested sections. */
+  frameParts: number;
   clientObjects: number;
   frames: number;
+}
+
+export interface RbxTreeNode {
+  id: string;
+  className: string;
+  name: string;
+  properties: Record<string, RbxPropertyValue>;
+  children: RbxTreeNode[];
 }
 
 export type KitKind = "tower-creator" | "etoh" | "roblox-place" | "roblox-model" | "unknown";
@@ -74,12 +92,51 @@ export function indexNodes(document: RbxDocument): Map<string, RbxNode> {
 
 export function documentStats(document: RbxDocument): DocumentStats {
   const byId = indexNodes(document);
+  const depthOf = nodeDepths(document, byId);
   return {
     instances: document.nodes.length,
-    parts: document.nodes.filter((node) => BASE_PART_CLASSES.has(node.className)).length,
+    parts: document.nodes.filter((node) => isBasePart(node.className)).length,
+    obbyParts: countPartsInShallowest(document, byId, depthOf, OBBY_CONTAINERS),
+    clientObjectParts: countPartsInShallowest(document, byId, depthOf, CLIENT_OBJECT_CONTAINERS),
+    frameParts: countPartsInShallowest(document, byId, depthOf, FRAME_PART_CONTAINERS),
     clientObjects: countClientObjects(document, byId),
     frames: countFrames(document, byId),
   };
+}
+
+/** Nested view of a document, or of one selected instance and its descendants. */
+export function documentTree(document: RbxDocument, rootIds: string[] = document.rootIds): RbxTreeNode[] {
+  const byId = indexNodes(document);
+  const build = (id: string, trail: Set<string>): RbxTreeNode | null => {
+    if (trail.has(id)) return null;
+    const node = byId.get(id);
+    if (!node) return null;
+    const next = new Set(trail);
+    next.add(id);
+    const children: RbxTreeNode[] = [];
+    for (const childId of node.childIds) {
+      const child = build(childId, next);
+      if (child) children.push(child);
+    }
+    return {
+      id: node.id,
+      className: node.className,
+      name: node.name,
+      properties: node.properties,
+      children,
+    };
+  };
+
+  const trees: RbxTreeNode[] = [];
+  for (const id of rootIds) {
+    const tree = build(id, new Set());
+    if (tree) trees.push(tree);
+  }
+  return trees;
+}
+
+export function isBasePart(className: string): boolean {
+  return BASE_PART_CLASSES.has(className);
 }
 
 export function detectKit(document: RbxDocument): KitDetection {
@@ -136,6 +193,65 @@ export function convertDocument(document: RbxDocument, target: ConvertTarget): C
     });
   }
   return { document, warnings, download: false };
+}
+
+function countPartsInShallowest(
+  document: RbxDocument,
+  byId: Map<string, RbxNode>,
+  depthOf: Map<string, number>,
+  names: Set<string>,
+): number {
+  let best = Number.POSITIVE_INFINITY;
+  const roots: RbxNode[] = [];
+  for (const node of document.nodes) {
+    if (!names.has(normalizeName(node.name))) continue;
+    const depth = depthOf.get(node.id) ?? 0;
+    if (depth < best) {
+      best = depth;
+      roots.length = 0;
+      roots.push(node);
+    } else if (depth === best) {
+      roots.push(node);
+    }
+  }
+  return countBasePartsUnder(roots, byId);
+}
+
+function countBasePartsUnder(roots: RbxNode[], byId: Map<string, RbxNode>): number {
+  const seen = new Set<string>();
+  let count = 0;
+  const stack = roots.flatMap((root) => root.childIds);
+  while (stack.length > 0) {
+    const id = stack.pop();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const node = byId.get(id);
+    if (!node) continue;
+    if (isBasePart(node.className)) count += 1;
+    stack.push(...node.childIds);
+  }
+  return count;
+}
+
+function nodeDepths(document: RbxDocument, byId: Map<string, RbxNode>): Map<string, number> {
+  const memo = new Map<string, number>();
+  const depth = (id: string, trail: Set<string>): number => {
+    const cached = memo.get(id);
+    if (cached !== undefined) return cached;
+    if (trail.has(id)) return 0;
+    const node = byId.get(id);
+    if (!node?.parentId || !byId.has(node.parentId)) {
+      memo.set(id, 0);
+      return 0;
+    }
+    trail.add(id);
+    const value = depth(node.parentId, trail) + 1;
+    trail.delete(id);
+    memo.set(id, value);
+    return value;
+  };
+  for (const node of document.nodes) depth(node.id, new Set());
+  return memo;
 }
 
 function countClientObjects(document: RbxDocument, byId: Map<string, RbxNode>): number {

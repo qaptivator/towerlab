@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RbxDocument, RbxNode } from "@towerlab/dom-schema";
-import { convertDocument, detectKit, documentForCleanModel, documentStats } from "./index";
+import { convertDocument, detectKit, documentForCleanModel, documentStats, documentTree } from "./index";
 
 function node(partial: Partial<RbxNode> & Pick<RbxNode, "id" | "className" | "name">): RbxNode {
   return {
@@ -46,9 +46,124 @@ describe("documentStats", () => {
     expect(documentStats(doc)).toEqual({
       instances: 8,
       parts: 2,
+      obbyParts: 0,
+      clientObjectParts: 0,
+      frameParts: 0,
       clientObjects: 1,
       frames: 2,
     });
+  });
+
+  it("counts baseparts under the highest Obby, ClientSidedObjects, and Frame", () => {
+    const doc = document(
+      [
+        node({ id: "ws", className: "Workspace", name: "Workspace", childIds: ["kit", "obby", "outside", "lobby"] }),
+        node({
+          id: "kit",
+          className: "Folder",
+          name: "MyTower",
+          parentId: "ws",
+          childIds: ["cos", "frame", "spawn"],
+        }),
+        node({ id: "obby", className: "Folder", name: "Obby", parentId: "ws", childIds: ["floor", "nested"] }),
+        node({ id: "floor", className: "Part", name: "Floor", parentId: "obby" }),
+        node({ id: "nested", className: "Model", name: "Stairs", parentId: "obby", childIds: ["step", "decoy"] }),
+        node({ id: "step", className: "WedgePart", name: "Step", parentId: "nested" }),
+        node({ id: "decoy", className: "Folder", name: "Obby", parentId: "nested", childIds: ["hidden"] }),
+        node({ id: "hidden", className: "Part", name: "Hidden", parentId: "decoy" }),
+        node({
+          id: "cos",
+          className: "Folder",
+          name: "ClientSidedObjects",
+          parentId: "kit",
+          childIds: ["spinner", "light"],
+        }),
+        node({ id: "spinner", className: "Model", name: "Spinner", parentId: "cos", childIds: ["blade"] }),
+        node({ id: "blade", className: "MeshPart", name: "Blade", parentId: "spinner" }),
+        node({ id: "light", className: "Part", name: "Light", parentId: "cos" }),
+        node({ id: "frame", className: "Folder", name: "Frame", parentId: "kit", childIds: ["s1", "s2"] }),
+        node({ id: "s1", className: "Folder", name: "1", parentId: "frame", childIds: ["a", "b"] }),
+        node({ id: "a", className: "Part", name: "A", parentId: "s1" }),
+        node({ id: "b", className: "MeshPart", name: "B", parentId: "s1" }),
+        node({ id: "s2", className: "Folder", name: "2", parentId: "frame", childIds: ["c"] }),
+        node({ id: "c", className: "UnionOperation", name: "C", parentId: "s2" }),
+        node({ id: "spawn", className: "SpawnLocation", name: "Spawn", parentId: "kit" }),
+        node({ id: "outside", className: "Part", name: "Outside", parentId: "ws" }),
+        node({ id: "lobby", className: "Folder", name: "Lobby", parentId: "ws", childIds: ["lowObby"] }),
+        node({ id: "lowObby", className: "Folder", name: "Obby", parentId: "lobby", childIds: ["ignored"] }),
+        node({ id: "ignored", className: "Part", name: "Ignored", parentId: "lowObby" }),
+      ],
+      ["ws"],
+    );
+
+    const stats = documentStats(doc);
+    expect(stats.obbyParts).toBe(3);
+    expect(stats.clientObjectParts).toBe(2);
+    expect(stats.frameParts).toBe(3);
+    expect(stats.parts).toBe(11);
+  });
+
+  it("counts every Obby when several sit at the same depth", () => {
+    const doc = document(
+      [
+        node({ id: "root", className: "Folder", name: "Workspace", childIds: ["left", "right"] }),
+        node({ id: "left", className: "Folder", name: "Lobby", parentId: "root", childIds: ["obbyA"] }),
+        node({ id: "obbyA", className: "Folder", name: "Obby", parentId: "left", childIds: ["a"] }),
+        node({ id: "a", className: "Part", name: "A", parentId: "obbyA" }),
+        node({ id: "right", className: "Folder", name: "Tower", parentId: "root", childIds: ["obbyB"] }),
+        node({ id: "obbyB", className: "Model", name: "obby", parentId: "right", childIds: ["b", "c"] }),
+        node({ id: "b", className: "Part", name: "B", parentId: "obbyB" }),
+        node({ id: "c", className: "TrussPart", name: "C", parentId: "obbyB" }),
+      ],
+      ["root"],
+    );
+
+    expect(documentStats(doc).obbyParts).toBe(3);
+  });
+});
+
+describe("documentTree", () => {
+  it("nests children and can start from a selection", () => {
+    const doc = document(
+      [
+        node({ id: "root", className: "Folder", name: "Obby", childIds: ["part"] }),
+        node({
+          id: "part",
+          className: "Part",
+          name: "Floor",
+          parentId: "root",
+          properties: { Anchored: { Bool: true } },
+        }),
+      ],
+      ["root"],
+    );
+
+    expect(documentTree(doc)).toEqual([
+      {
+        id: "root",
+        className: "Folder",
+        name: "Obby",
+        properties: {},
+        children: [
+          {
+            id: "part",
+            className: "Part",
+            name: "Floor",
+            properties: { Anchored: { Bool: true } },
+            children: [],
+          },
+        ],
+      },
+    ]);
+    expect(documentTree(doc, ["part"])).toEqual([
+      {
+        id: "part",
+        className: "Part",
+        name: "Floor",
+        properties: { Anchored: { Bool: true } },
+        children: [],
+      },
+    ]);
   });
 });
 

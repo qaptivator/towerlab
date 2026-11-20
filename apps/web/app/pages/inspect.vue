@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { RbxNode } from "@towerlab/dom-schema";
-import { indexNodes } from "@towerlab/kit-engine";
+import { documentTree, indexNodes } from "@towerlab/kit-engine";
 import { serializeRbxm } from "@towerlab/wasm-bridge";
-import { downloadBytes, formatCount, rbxmName } from "../utils/format";
+import { downloadBytes, downloadJson, jsonName, rbxmName } from "../utils/format";
 
 useHead({ title: "Inspect · TowerLab" });
 
@@ -30,9 +30,10 @@ watch(loaded, (file) => {
       `Kind: ${file.kit.label}`,
       `Format: ${file.document.format}`,
       `Instances: ${file.stats.instances}`,
-      `Parts: ${file.stats.parts}`,
-      `Client objects: ${file.stats.clientObjects}`,
-      `Frames: ${file.stats.frames}`,
+      `Obby parts: ${file.stats.obbyParts}`,
+      `Client object parts: ${file.stats.clientObjectParts}`,
+      `Frame parts: ${file.stats.frameParts}`,
+      `Total parts: ${file.stats.parts}`,
       file.document.diagnostics.length
         ? `Parser notes: ${file.document.diagnostics.slice(0, 8).join(" | ")}`
         : "Parser notes: none",
@@ -40,6 +41,16 @@ watch(loaded, (file) => {
     ].join("\n"),
   );
 }, { immediate: true });
+
+function exportTree() {
+  if (!loaded.value) return;
+  downloadJson(documentTree(loaded.value.document), jsonName(loaded.value.name, "tree"));
+}
+
+function exportSelection() {
+  if (!loaded.value || !selectedId.value) return;
+  downloadJson(documentTree(loaded.value.document, [selectedId.value]), jsonName(loaded.value.name, "selection"));
+}
 
 async function download() {
   if (!loaded.value) return;
@@ -80,13 +91,21 @@ function reset() {
 
     <div v-else class="flex flex-col gap-4">
       <FileSummary :file="loaded" @clear="reset" />
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <p class="text-xs text-dim">
-          {{ formatCount(loaded.stats.instances) }} instances in the tree
-          <template v-if="loaded.document.diagnostics.length">
-            · {{ loaded.document.diagnostics.length }} properties were skipped
-          </template>
+      <div class="flex flex-wrap items-center justify-end gap-2">
+        <p v-if="loaded.document.diagnostics.length" class="mr-auto text-xs text-dim">
+          {{ loaded.document.diagnostics.length }} properties were skipped
         </p>
+        <button class="rounded-xl bg-raised px-4 py-2.5 font-mono text-sm text-ink hover:bg-container-high" type="button" @click="exportTree">
+          Export tree
+        </button>
+        <button
+          class="rounded-xl bg-raised px-4 py-2.5 font-mono text-sm text-ink hover:bg-container-high disabled:cursor-not-allowed disabled:opacity-50"
+          type="button"
+          :disabled="!selected"
+          @click="exportSelection"
+        >
+          Export selection
+        </button>
         <button
           class="rounded-xl bg-mint px-4 py-2.5 font-mono text-sm font-medium text-canvas shadow-mint transition active:scale-[0.99] disabled:opacity-60"
           type="button"

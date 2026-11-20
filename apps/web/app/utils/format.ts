@@ -50,7 +50,15 @@ export function formatPropertyValue(value: RbxPropertyValue): string {
 }
 
 export function downloadBytes(bytes: Uint8Array, filename: string) {
-  const blob = new Blob([bytes], { type: "application/octet-stream" });
+  downloadBlob(new Blob([bytes], { type: "application/octet-stream" }), filename);
+}
+
+export function downloadJson(value: unknown, filename: string) {
+  const text = JSON.stringify(value, null, 2);
+  downloadBlob(new Blob([text], { type: "application/json" }), filename);
+}
+
+function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -60,8 +68,16 @@ export function downloadBytes(bytes: Uint8Array, filename: string) {
 }
 
 export function rbxmName(filename: string): string {
+  return `${fileStem(filename)}.rbxm`;
+}
+
+export function jsonName(filename: string, suffix: string): string {
+  return `${fileStem(filename)}.${suffix}.json`;
+}
+
+function fileStem(filename: string): string {
   const stripped = filename.replace(/\.(rbxlx|rbxl|rbxmx|rbxm)$/i, "");
-  return `${stripped || "model"}.rbxm`;
+  return stripped || "model";
 }
 
 function trimNumber(value: number): string {
