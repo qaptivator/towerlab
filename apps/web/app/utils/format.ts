@@ -15,6 +15,24 @@ export function propertyTypeName(value: RbxPropertyValue): string {
   return keys.length === 1 ? keys[0] : "value";
 }
 
+/** Decoded script source. Newlines and tabs are real characters, not JSON escapes. */
+export function readSource(value: RbxPropertyValue): string {
+  if (typeof value.String === "string") return value.String;
+  if (typeof value.ProtectedString === "string") return value.ProtectedString;
+  const binary = value.BinaryString;
+  if (typeof binary === "string") return decodeBinaryString(binary);
+  if (Array.isArray(binary) && binary.every((item) => typeof item === "number")) {
+    return new TextDecoder().decode(Uint8Array.from(binary));
+  }
+  return "";
+}
+
+export function sourcePreview(source: string): string {
+  const flat = source.replace(/\s+/g, " ").trim();
+  if (!flat) return "Empty source";
+  return flat.length > 96 ? `${flat.slice(0, 93)}…` : flat;
+}
+
 export function formatPropertyValue(value: RbxPropertyValue): string {
   const type = propertyTypeName(value);
   const inner = value[type];
@@ -86,6 +104,17 @@ export function textName(filename: string, suffix: string): string {
 function fileStem(filename: string): string {
   const stripped = filename.replace(/\.(rbxlx|rbxl|rbxmx|rbxm)$/i, "");
   return stripped || "model";
+}
+
+function decodeBinaryString(value: string): string {
+  if (!value || value.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) return value;
+  try {
+    const raw = atob(value);
+    const bytes = Uint8Array.from(raw, (char) => char.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return value;
+  }
 }
 
 function trimNumber(value: number): string {
