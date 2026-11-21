@@ -3,6 +3,7 @@ import type { RbxDocument, RbxNode } from "@towerlab/dom-schema";
 import {
   convertDocument,
   convertJtoh55ToV6,
+  convertTowerCreatorToV6,
   convertersFor,
   detectSource,
   documentStats,
@@ -326,7 +327,7 @@ describe("conversion", () => {
     expect(pipelineLabel("tower-creator", "jtoh-5.5", "place")).toBe("Tower Creator → EToH v6 → JToH 5.5 → place");
   });
 
-  it("stops on the first converter that is not written yet", () => {
+  it("stops on the downgrade when Tower Creator is asked for JToH 5.5", () => {
     const doc = document(
       [node({ id: "note", className: "StringValue", name: "Source", properties: { Value: { String: "Tower Creator" } } })],
       ["note"],
@@ -334,8 +335,71 @@ describe("conversion", () => {
     const result = convertDocument(doc, "jtoh-5.5", "model");
     expect(result.download).toBe(false);
     expect(result.steps).toEqual(["tower-creator->etoh-6", "etoh-6->jtoh-5.5"]);
-    expect(result.warnings[0]?.message).toContain("Tower Creator to EToH v6");
+    expect(result.warnings[0]?.message).toContain("EToH v6 to JToH 5.5");
     expect(result.document).toBe(doc);
+  });
+
+  it("turns a Tower Creator ClientParts button into a v6.1.3 button", () => {
+    const doc = document(
+      [
+        node({ id: "tower", className: "Model", name: "TC Tower", childIds: ["parts", "note"] }),
+        node({ id: "parts", className: "Folder", name: "ClientParts", parentId: "tower", childIds: ["btn", "mystery"] }),
+        node({
+          id: "btn",
+          className: "Part",
+          name: "ButtonPart",
+          parentId: "parts",
+          properties: {
+            Attributes: {
+              Attributes: {
+                OriginName: { String: "Button" },
+                FunctionClass: { String: "Button" },
+                Timer: { Float64: 3 },
+              },
+            },
+          },
+        }),
+        node({
+          id: "mystery",
+          className: "Part",
+          name: "MysteryWidget",
+          parentId: "parts",
+          properties: { Attributes: { Attributes: { OriginName: { String: "MysteryWidget" } } } },
+        }),
+        node({
+          id: "note",
+          className: "StringValue",
+          name: "Credit",
+          parentId: "tower",
+          properties: { Value: { String: "Exported by Tower Creator" } },
+        }),
+      ],
+      ["tower"],
+    );
+    const warnings: string[] = [];
+    const converted = openDom(convertTowerCreatorToV6(doc, warnings));
+    const root = converted.FindFirstChild("TowerKit");
+    const client = root?.FindFirstChild("ClientSidedObjects");
+    const button = client?.FindFirstChild("Button");
+    const config = button?.FindFirstChild("ButtonConfiguration");
+    expect(root?.GetAttribute("OriginalName")).toBe("TC Tower");
+    expect(client?.GetAttribute("KitVersion")).toBe("6.1.3");
+    expect(button?.ClassName).toBe("Model");
+    expect(button?.FindFirstChild("Part")?.Name).toBe("Part");
+    expect(config?.HasTag("CO_Interactables/Button")).toBe(true);
+    expect(config?.HasTag("v6.1.3")).toBe(true);
+    expect(config?.GetAttribute("Timer")).toBe(3);
+    expect(client?.FindFirstChild("DistanceCulling")?.ClassName).toBe("Folder");
+    expect(warnings).toEqual([
+      'Tower Creator object "MysteryWidget" has no direct EToH v6 equivalent and was preserved as a static/client part.',
+    ]);
+
+    const result = convertDocument(doc, "etoh-6", "model");
+    expect(result.download).toBe(true);
+    expect(result.source).toBe("tower-creator");
+    expect(result.steps).toEqual(["tower-creator->etoh-6"]);
+    expect(result.warnings.map((warning) => warning.message).join("\n")).toContain("MysteryWidget");
+    expect(result.warnings.some((warning) => warning.message.includes("Model export"))).toBe(true);
   });
 
   it("reports packaging when the file is already v6 and the target stays v6", () => {

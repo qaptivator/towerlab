@@ -6,15 +6,17 @@ This is the API for writing tower-kit converters. The page calls one function, `
 
 `convertJtoh55ToV6` is implemented in `packages/kit-engine/src/etoh-v613.ts`. It turns a JToH 5.5 tree into EToH v6.1.3. `upgradeV6To613Document` in that file patches an existing v6.0.x–v6.1.2 kit to v6.1.3. The runner calls it when the source and target are both `etoh-6`.
 
-These two still throw `ConverterNotReady`. Replace the throw with a real body.
+`convertTowerCreatorToV6` is implemented in `packages/kit-engine/src/tower-creator.ts`. It rewrites a Tower Creator `ClientParts` tree into EToH v6.0.2, then runs `upgradeV6To613Document`. Pass a `string[]` as the second argument to collect objects that have no v6 equivalent. `convertDocument` forwards those strings as warnings.
+
+`convertV6ToJtoh55` still throws `ConverterNotReady`. Replace the throw with a real body.
 
 | Function | Input | Output |
 | --- | --- | --- |
-| `convertTowerCreatorToV6` | Tower Creator document | EToH v6 document |
+| `convertTowerCreatorToV6` | Tower Creator document | EToH v6.1.3 document. Already written. |
 | `convertJtoh55ToV6` | JToH 5.5 document | EToH v6.1.3 document. Already written. |
 | `convertV6ToJtoh55` | EToH v6 document | JToH 5.5 document |
 
-`convertTowerCreatorToV6` and `convertV6ToJtoh55` live in `packages/kit-engine/src/convert.ts`. The JToH 5.5 body lives in `etoh-v613.ts` and is re-exported from there. `convertDocument` is the runner. It is already wired to the convert page. Leave its step order alone.
+`convertV6ToJtoh55` lives in `packages/kit-engine/src/convert.ts`. The Tower Creator body lives in `tower-creator.ts` and the JToH 5.5 body lives in `etoh-v613.ts`. Both are re-exported from `convert.ts`. `convertDocument` is the runner. It is already wired to the convert page. Leave its step order alone.
 
 `packageForOutput` is not a kit converter. Place export adds instant-play scripts. Model export writes the kit and its music. Keep that work in `packageForOutput`.
 
@@ -69,9 +71,9 @@ The package entry is `packages/kit-engine/src/index.ts` (`@towerlab/kit-engine`)
 import type { RbxDocument } from "@towerlab/dom-schema";
 import { openDom } from "./dom";
 
-export function convertTowerCreatorToV6(document: RbxDocument): RbxDocument {
+export function convertV6ToJtoh55(document: RbxDocument): RbxDocument {
   const dom = openDom(document);
-  const tower = dom.FindFirstChild("Tower", true);
+  const client = dom.FindFirstChild("ClientSidedObjects", true);
   // ...
   return dom.toDocument();
 }
