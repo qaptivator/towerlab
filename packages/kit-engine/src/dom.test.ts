@@ -138,4 +138,15 @@ describe("RbxInstance", () => {
     pad?.AddTag("next");
     expect(dom.toDocument().nodes[0]?.properties.Tags).toEqual({ Tags: ["ez", "pz", "next"] });
   });
+
+  it("copies a proxied document instead of cloning the proxy", () => {
+    const properties = new Proxy({ Anchored: { Bool: true } }, {});
+    const doc = new Proxy(
+      document([node({ id: "part", className: "Part", name: "Pad", properties })], ["part"]),
+      {},
+    );
+    const dom = openDom(doc);
+    expect(dom.Roots[0]?.GetProperty("Anchored")).toEqual({ Bool: true });
+    expect(dom.toDocument().nodes[0]?.name).toBe("Pad");
+  });
 });

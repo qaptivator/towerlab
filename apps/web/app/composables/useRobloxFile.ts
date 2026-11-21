@@ -27,7 +27,7 @@ export function useRobloxFile() {
 		error.value = null
 		try {
 			const bytes = new Uint8Array(await file.arrayBuffer())
-			const document = await parseRobloxFile(bytes)
+			const document = markRaw(await parseRobloxFile(bytes))
 			loaded.value = {
 				name: file.name,
 				size: file.size,

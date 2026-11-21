@@ -1,4 +1,4 @@
-import type { RbxDocument, RbxNode, RbxPropertyValue, RbxSourceFormat } from "@towerlab/dom-schema";
+import { clonePlain, type RbxDocument, type RbxNode, type RbxPropertyValue, type RbxSourceFormat } from "@towerlab/dom-schema";
 import { isA } from "./classes";
 import { decodeBinaryProperty } from "./text";
 import type { AttributeValue } from "./types";
@@ -35,7 +35,7 @@ export class RbxDom {
         name: node.name,
         parentId: node.parentId,
         childIds: [...node.childIds],
-        properties: structuredClone(node.properties),
+        properties: clonePlain(node.properties),
         destroyed: false,
       });
     }
@@ -109,7 +109,7 @@ export class RbxDom {
         name: node.name,
         parentId: node.parentId,
         childIds: [...node.childIds],
-        properties: structuredClone(node.properties),
+        properties: clonePlain(node.properties),
       });
       for (const childId of node.childIds) visit(childId);
     };
@@ -285,7 +285,7 @@ export class RbxInstance {
       delete node.properties[name];
       return;
     }
-    node.properties[name] = structuredClone(value);
+    node.properties[name] = clonePlain(value);
   }
 
   GetAttribute(name: string): AttributeValue | undefined {
@@ -430,7 +430,7 @@ function cloneNode(dom: RbxDom, sourceId: string, parentId: string | null): stri
     name: source.name,
     parentId,
     childIds: [],
-    properties: structuredClone(source.properties),
+    properties: clonePlain(source.properties),
     destroyed: false,
   };
   dom.nodes.set(id, copy);
@@ -466,7 +466,7 @@ function wrapAttribute(value: AttributeValue): RbxPropertyValue {
     if (!Number.isFinite(value)) return { Float64: nonFiniteToken(value) };
     return { Float64: value };
   }
-  return structuredClone(value);
+  return clonePlain(value);
 }
 
 function isNumberType(type: string): boolean {

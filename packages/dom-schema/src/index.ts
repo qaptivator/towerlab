@@ -15,6 +15,8 @@ export interface RbxNode {
 
 export type RbxSourceFormat = "binary" | "xml";
 
+export { clonePlain } from "./clone";
+
 export interface RbxDocument {
   nodes: RbxNode[];
   rootIds: string[];

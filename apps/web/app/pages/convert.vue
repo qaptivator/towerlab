@@ -99,9 +99,9 @@ async function convert() {
 	if (detection.value.kit === 'unknown') return
 	converting.value = true
 	convertError.value = null
-	const result = convertDocument(loaded.value.document, target.value, shape.value)
-	warnings.value = result.warnings.map((warning) => warning.message)
 	try {
+		const result = convertDocument(loaded.value.document, target.value, shape.value)
+		warnings.value = result.warnings.map((warning) => warning.message)
 		if (!result.download) return
 		const bytes = await serializeRbxm(result.document)
 		const name =

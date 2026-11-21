@@ -1,4 +1,4 @@
-import type { RbxDocument } from "@towerlab/dom-schema";
+import { clonePlain, type RbxDocument } from "@towerlab/dom-schema";
 import { parseOnThisThread, serializeRbxlOnThisThread, serializeRbxmOnThisThread } from "./codec";
 import type { WorkerOp, WorkerRequest, WorkerResponse } from "./protocol";
 
@@ -54,7 +54,12 @@ function callWorker(op: WorkerOp, payload: { bytes?: Uint8Array; document?: RbxD
   if (!active) return Promise.reject(new Error("worker-unavailable"));
 
   const id = nextId++;
-  const request: WorkerRequest = { id, op, ...payload };
+  const request: WorkerRequest = {
+    id,
+    op,
+    ...payload,
+    document: payload.document ? clonePlain(payload.document) : undefined,
+  };
   const transfer: Transferable[] = [];
   if (payload.bytes) {
     const copy = new Uint8Array(payload.bytes);
